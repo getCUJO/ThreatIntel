@@ -11,15 +11,16 @@ Copy the scripts to your ghidra_scripts directory (default: <HomeDirectory\>/ghi
 Recover function names in stripped Go ELF files.
 
 ## find_static_strings.py 
-Find statically allocated string structures in Go binaries.
- type stringStruct struct {
-     str unsafe.Pointer
-     len int
- }
+Find statically allocated string structures in Go binaries. <br />
+type stringStruct struct { <br />
+   str unsafe.Pointer <br />
+   len int <br />
+}
  
 ## find_dynamic_strings.py 
-Find dynamically allocated string structures in Go binaries.
- type stringStruct struct {
-     str unsafe.Pointer
-     len int
+Find dynamically allocated string structures in Go binaries. <br />
+type stringStruct struct { <br />
+   str unsafe.Pointer <br />
+   len int <br />
  }
+
