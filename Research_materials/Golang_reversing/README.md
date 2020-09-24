@@ -15,3 +15,7 @@ Hello world files. None of these files are malicious, although some AV might det
 | hello_go_strip| 45a338dfddf59b3fd229ddd5822bc44e0d4a036f570b7eaa8a32958222af2be2 |
 | hello_go.exe  | 5ab9ab9ca2abf03199516285b4fc81e2884342211bf0b88b7684f87e61538c4d |
 | hello_go_strip.exe | ca487812de31a5b74b3e43f399cb58d6bd6d8c422a4009788f22ed4bd4fd936c |
+
+## hacktivity2020.pdf
+
+Our presentation slides from Hacktivity 2020.
