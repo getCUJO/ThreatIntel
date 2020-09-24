@@ -4,7 +4,7 @@ A set of Ghidra scripts for reverse engineering.
 
 ## Installation
 
-Copy the scripts to your ghidra_scripts directory (default: <HomeDirectory>/ghidra_scripts). Use Script Manager to launch the scripts.
+Copy the scripts to your ghidra_scripts directory (default: <HomeDirectory\>/ghidra_scripts). Use Script Manager to launch the scripts.
 
 ## go_func.py
 
