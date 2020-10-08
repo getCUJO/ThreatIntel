@@ -18,4 +18,8 @@ Hello world files. None of these files are malicious, although some AV might det
 
 ## hacktivity2020.pdf
 
-Our presentation slides from Hacktivity 2020.
+The presentation slides based on the conference talk from Hacktivity 2020.
+
+## reversing_golang_binaries_with_ghidra.pdf
+
+The detailed research whitepaper on Reversing Golang Binaries with Ghidra.
