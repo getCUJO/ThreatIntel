@@ -11,9 +11,12 @@
 
 from ghidra.program.model.data import PointerDataType
 from ghidra.program.model.data import IntegerDataType
+from ghidra.program.model.data import LongDataType
+
 
 image_base = currentProgram.getImageBase()
 max_offset = currentProgram.getMaxAddress()
+pointer_size = currentProgram.getDefaultPointerSize()
 
 print "Image Base: 0x%x, Max offset: 0x%x" % (image_base.getOffset(), max_offset.getOffset())
 
@@ -36,11 +39,17 @@ def string_rename(ptr):
             length_address = start.add(ptr)
             start = start.add(ptr)
             try:
-                length = getInt(length_address)
+                if pointer_size == 8:
+                    length = getLong(length_address)
+                else:
+                    length = getInt(length_address)
                 #Set the possible length to eliminate FPs.
                 if length not in range(1,100):
                     continue
-                string_address = currentProgram.getAddressFactory().getAddress(hex(getInt(string_address_pointer)))
+                if pointer_size == 8:
+                    string_address = currentProgram.getAddressFactory().getAddress(hex(getLong(string_address_pointer)).rstrip("L"))
+                else:
+                    string_address = currentProgram.getAddressFactory().getAddress(hex(getInt(string_address_pointer)))
                 if string_address < image_base or string_address >= max_offset:
                     continue
                 if not isPrintable (string_address, length):
