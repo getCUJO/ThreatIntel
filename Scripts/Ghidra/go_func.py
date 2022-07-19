@@ -7,6 +7,32 @@
 
 from ghidra.program.model.symbol.SourceType import *
 
+pclntab_magic = ['\xfb\xff\xff\xff\x00\x00',
+'\xfa\xff\xff\xff\x00\x00',
+'\xf0\xff\xff\xff\x00\x00']
+
+#Find pclntab structure in Windows PE files
+def findPclntabPE():
+    for magic in pclntab_magic:
+        #Search could be smarter by looking only in specific sections
+        pclntab = currentProgram.getMinAddress()
+        while pclntab != None:
+            pclntab = findBytes(pclntab.add(1), magic)
+            if pclntab == None:
+                continue
+            if isPclntab(pclntab):
+                print "Pclntab found"
+                return pclntab
+    return pclntab
+
+#Test if pclntab was found by checking pc quantum and pointer size values
+def isPclntab(address):
+    pc_quantum = getByte(address.add(6))
+    pointer_size = getByte(address.add(7))
+    if (pc_quantum != 1 and pc_quantum != 2 and pc_quantum != 4) or (pointer_size != 4 and pointer_size != 8):
+         return False
+    return True
+
 #Find the .gopclntab section
 def getGopclntab():
     for block in getMemoryBlocks():
@@ -154,8 +180,18 @@ def renameFunc118(start):
             func = createFunction(func_address, func_name.getValue())
             print "New function created: %s" % func_name
 
+executable_format = currentProgram.getExecutableFormat()
+start = None
 
-start = getGopclntab()    
+if executable_format== "Portable Executable (PE)":
+    print "PE file found"
+    start = findPclntabPE()
+elif executable_format== "Executable and Linking Format (ELF)":
+    print "ELF file found"
+    start = getGopclntab()
+else:
+    print "Incorrect file format."
+    
 if start is not None:
     magic = getInt(start) & 0xffffffff
     if magic == 0xfffffff0:
