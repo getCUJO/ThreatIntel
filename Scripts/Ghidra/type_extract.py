@@ -143,13 +143,16 @@ def isModuledata(address, magic):
     return False
 
 #Get typelinks slice, beginning and end of types section
-def getTypelinks(moduledata, magic):
+def getTypelinks(moduledata, magic, go_version):
     if magic == '\xfb\xff\xff\xff\x00\x00':
         offset = 25
         offset2 = 30
     else:
         offset = 35
-        offset2 = 42
+        if go_version == "go1.16":
+            offset2 = 40
+        elif go_version == "go1.18":
+            offset2 = 42
     type = getAddressAt(moduledata.add(offset*pointer_size))
     etype = getAddressAt(moduledata.add((offset+1)*pointer_size))
     typelinks = getAddressAt(moduledata.add(offset2*pointer_size))
@@ -294,10 +297,10 @@ def recoverTypes(type_address):
             fields.append(name.getValue()  + " " + getSymbolAt(new_type).getName())
         setPreComment(type_address,"type " + name_type + " struct{" + "\n\t" + "\n\t".join(fields) + "\n" + "}")
 
-def mainPE():
+def mainPE(go_version):
     pclntab, magic = findPclntabPE()
     module_data = findModuledata(pclntab, magic)
-    type, etype, typelinks, ntypes = getTypelinks(module_data, magic) 
+    type, etype, typelinks, ntypes = getTypelinks(module_data, magic, go_version) 
     etypelinks = typelinks.add(ntypes*4)
     return typelinks, etypelinks, type
 
@@ -326,7 +329,7 @@ length_offset = getLengthOffset()
 
 if executable_format== "Portable Executable (PE)":
     print "PE file found"
-    typelinks, etypelinks, type = mainPE()
+    typelinks, etypelinks, type = mainPE(version)
     getAllTypes(typelinks, etypelinks, type)
 elif executable_format== "Executable and Linking Format (ELF)":
     print "ELF file found"
