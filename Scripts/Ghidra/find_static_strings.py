@@ -5,9 +5,9 @@
 # }
 #@author padorka@cujoai
 #@category goscripts
-#@keybinding 
-#@menupath 
-#@toolbar 
+#@keybinding
+#@menupath
+#@toolbar
 
 from ghidra.program.model.data import PointerDataType
 from ghidra.program.model.data import IntegerDataType
@@ -22,11 +22,12 @@ print "Image Base: 0x%x, Max offset: 0x%x" % (image_base.getOffset(), max_offset
 
 #Look for strings with printable characters only to eliminate FPs.
 def isPrintable(s, l):
-    for i in range(l):
-        if getByte(s) not in range(32,126):
-            return False
-        s = s.add(1)
-    return True
+    maybe_str = ''.join(getByte(s+i) for i in range(l))
+    try:
+        maybe_str.encode('utf8')
+        return True
+    except Exception:
+        return False
 
 def string_rename(ptr):
     for block in getMemoryBlocks():
@@ -58,7 +59,7 @@ def string_rename(ptr):
                 createData(string_address_pointer, PointerDataType.dataType)
                 if getDataAt(length_address) is not None:
                     data_type = getDataAt(length_address).getDataType()
-                    #Remove undefined data to be able to create int. 
+                    #Remove undefined data to be able to create int.
                     #Keep an eye on other predefined data types.
                     if data_type.getName() in ["undefined4", "undefined8"]:
                         removeData(getDataAt(length_address))
