@@ -1,15 +1,18 @@
 #Recover function names in stripped Go binaries.
 #@author padorka@cujoai
 #@category goscripts
-#@keybinding 
-#@menupath 
-#@toolbar 
+#@keybinding
+#@menupath
+#@toolbar
 
 from ghidra.program.model.symbol.SourceType import *
 
-pclntab_magic = ['\xfb\xff\xff\xff\x00\x00',
-'\xfa\xff\xff\xff\x00\x00',
-'\xf0\xff\xff\xff\x00\x00']
+pclntab_magic = [
+    '\xfb\xff\xff\xff\x00\x00',
+    '\xfa\xff\xff\xff\x00\x00',
+    '\xf0\xff\xff\xff\x00\x00'
+    '\xf1\xff\xff\xff\x00\x00',
+]
 
 #Find pclntab structure in Windows PE files
 def findPclntabPE():
@@ -46,7 +49,7 @@ def getGopclntab():
 
 #Recover function names for Go versions 1.2 - 1.15
 def renameFunc12(start):
-    ptrsize= getByte(start.add(7))
+    ptrsize = getByte(start.add(7))
     if ptrsize == 8:
         nfunctab = getLong(start.add(8))
     else:
@@ -73,10 +76,10 @@ def renameFunc12(start):
             try:
                 func_name = createAsciiString(name_address)
             except:
-                print "ERROR: No name" 
+                print "ERROR: No name"
                 continue
 
-        
+
         func = getFunctionAt(func_address)
         if func is not None:
             func_name_old = func.getName()
@@ -88,7 +91,7 @@ def renameFunc12(start):
 
 #Recover function names for Go versions 1.16 - 1.17
 def renameFunc116(start):
-    ptrsize= getByte(start.add(7))
+    ptrsize = getByte(start.add(7))
     if ptrsize == 8:
         nfunctab = getLong(start.add(8))
         offset = getLong(start.add(8 + 2*ptrsize))
@@ -121,10 +124,10 @@ def renameFunc116(start):
             try:
                 func_name = createAsciiString(name_address)
             except:
-                print "ERROR: No name" 
+                print "ERROR: No name"
                 continue
 
-        
+
         func = getFunctionAt(func_address)
         if func is not None:
             func_name_old = func.getName()
@@ -136,19 +139,15 @@ def renameFunc116(start):
 
 #Recover function names for Go versions 1.18 and above
 def renameFunc118(start):
-    ptrsize= getByte(start.add(7))
-    if ptrsize == 8:
-        nfunctab = getLong(start.add(8))
-        textStart = getLong(start.add(8 + 2*ptrsize))
-        offset = getLong(start.add(8 + 3*ptrsize))
-        funcnametab = start.add(offset)
-        offset = getLong(start.add(8 + 7*ptrsize))
-    else:
-        nfunctab = getInt(start.add(8))
-        textStart = getInt(start.add(8 + 2*ptrsize))
-        offset = getInt(start.add(8 + 3*ptrsize))
-        funcnametab = start.add(offset)
-        offset = getInt(start.add(8 + 7*ptrsize))
+    ptrsize = getByte(start.add(7))
+    ptr_f = getLong if ptrsize == 8 else getInt
+
+    nfunctab = ptr_f(start.add(8))
+    textStart = ptr_f(start.add(8 + 2*ptrsize))
+    offset = ptr_f(start.add(8 + 3*ptrsize))
+    funcnametab = start.add(offset)
+    offset = ptr_f(start.add(8 + 7*ptrsize))
+
     functab = start.add(offset)
 
     p = functab
@@ -167,10 +166,10 @@ def renameFunc118(start):
             try:
                 func_name = createAsciiString(name_address)
             except:
-                print "ERROR: No name" 
+                print "ERROR: No name"
                 continue
 
-        
+
         func = getFunctionAt(func_address)
         if func is not None:
             func_name_old = func.getName()
@@ -180,26 +179,32 @@ def renameFunc118(start):
             func = createFunction(func_address, func_name.getValue())
             print "New function created: %s" % func_name
 
-executable_format = currentProgram.getExecutableFormat()
-start = None
+magic_map = {
+    0xfffffff0: renameFunc118,
+    0xfffffff1: renameFunc118,
+    0xfffffffa: renameFunc116,
+    0xfffffffb: renameFunc12,
+}
 
-if executable_format== "Portable Executable (PE)":
-    print "PE file found"
-    start = findPclntabPE()
-elif executable_format== "Executable and Linking Format (ELF)":
-    print "ELF file found"
-    start = getGopclntab()
-else:
-    print "Incorrect file format."
-    
-if start is not None:
-    magic = getInt(start) & 0xffffffff
-    if magic == 0xfffffff0:
-        renameFunc118(start)
-    elif magic == 0xfffffffa:
-        renameFunc116(start)
-    elif magic == 0xfffffffb:
-        renameFunc12(start)
+def main():
+    executable_format = currentProgram.getExecutableFormat()
+
+    if executable_format== "Portable Executable (PE)":
+        print "PE file found"
+        start = findPclntabPE()
+    elif executable_format== "Executable and Linking Format (ELF)":
+        print "ELF file found"
+        start = getGopclntab()
     else:
+        print "Unhandled file format."
+        return
+
+    magic = getInt(start) & 0xffffffff
+    f = magic_map.get(magic)
+    if f is None:
         print "WARNING: Unknown .gopclntab magic, assuming Go 1.2 compatibility"
-        renameFunc12(start)
+        f = renameFunc12
+
+    f(start)
+
+main()
