@@ -1,40 +1,30 @@
 #Find types in stripped Go binaries.
 #@author padorka@cujoai
 #@category goscripts
-#@keybinding 
-#@menupath 
-#@toolbar 
+#@keybinding
+#@menupath
+#@toolbar
 
 import struct
+
 from ghidra.program.model.symbol.SourceType import *
 
-versions = ['\x67\x6f\x31\x2e\x31\x38',
-'\x67\x6f\x31\x2e\x31\x37',
-'\x67\x6f\x31\x2e\x31\x36',
-'\x67\x6f\x31\x2e\x31\x35',
-'\x67\x6f\x31\x2e\x31\x34',
-'\x67\x6f\x31\x2e\x31\x33',
-'\x67\x6f\x31\x2e\x31\x32',
-'\x67\x6f\x31\x2e\x31\x31',
-'\x67\x6f\x31\x2e\x31\x30',
-'\x67\x6f\x31\x2e\x39',
-'\x67\x6f\x31\x2e\x38',
-'\x67\x6f\x31\x2e\x37',
-'\x67\x6f\x31\x2e\x36',
-'\x67\x6f\x31\x2e\x35',
-'\x67\x6f\x31\x2e\x34',
-'\x67\x6f\x31\x2e\x33',
-'\x67\x6f\x31\x2e\x32']
+GO_MAXVER = 20
 
-pclntab_magic = ['\xfb\xff\xff\xff\x00\x00',
-'\xfa\xff\xff\xff\x00\x00',
-'\xf0\xff\xff\xff\x00\x00']
+versions = ['go1.%d' % num for num in range(GO_MAXVER+1)[::-1]]
+
+pclntab_magic = [
+    '\xfb\xff\xff\xff\x00\x00',
+    '\xfa\xff\xff\xff\x00\x00',
+    '\xf0\xff\xff\xff\x00\x00',
+    '\xf1\xff\xff\xff\x00\x00',
+]
 
 #Get address at a specific address
 def getAddressAt(address):
     return currentProgram.getAddressFactory().getAddress(hex(getInt(address)))
 
-#Remove data at a specific location. Needed to be able to create the right strings. 
+#Remove data at a specific location. Needed to be able to create the right strings.
 def removeDataAll(address, length):
     for i in range(length):
         removeDataAt(address.add(i))
@@ -81,11 +71,10 @@ def findVersion():
 #From go1.17 - Varint-encoded length. Now we only search for the first byte, possible issues with long strings.
 #Todo: Change it to avoid possible issues.
 def getLengthOffset():
-    if version in ['\x67\x6f\x31\x2e\x31\x38', '\x67\x6f\x31\x2e\x31\x37']:
-        return 1
-    else:
+    vernum = int(version.split('.')[1])
+    if vernum < 17:
         return 2
-    return None
+    return 1
 
 #Find pclntab by looking for magic value
 def findPclntabPE():
@@ -123,7 +112,7 @@ def findModuledata(pclntab, magic):
         s = struct.pack('<I', pclntab.getOffset())
         module_data = findBytes(module_data.add(1),s)
         print module_data
-        if module_data == None:
+        if module_data is None:
             return None
         if isModuledata(module_data, magic):
             return module_data
@@ -157,7 +146,7 @@ def getTypelinks(moduledata, magic):
     return type, etype, typelinks, ntypes
 
 #Main function to find and recover types
-def recoverTypes(type_address):
+def recoverTypes(type_address, type):
     if type_address in recovered_types:
         print "Type already recovered at  0x%x" % type_address.getOffset()
         return type_address
@@ -209,11 +198,11 @@ def recoverTypes(type_address):
         outputs= []
         for i in range(inCount):
             input = getAddressAt(type_address.add(4*pointer_size+8+8+pointer_size + tflagUncommon*16 + i*pointer_size))
-            recoverTypes(input)
+            recoverTypes(input, type)
             inputs.append(getSymbolAt(input).getName())
         for i in range(outCount):
             output = getAddressAt(type_address.add(4*pointer_size+8+8+pointer_size + tflagUncommon*16 +inCount*pointer_size + i*pointer_size))
-            recoverTypes(output)
+            recoverTypes(output, type)
             outputs.append(getSymbolAt(output).getName())
         if last_input == 0x80 and len(inputs) > 0:
             inputs[-1] = inputs[-1].replace("[]","...")
@@ -240,13 +229,13 @@ def recoverTypes(type_address):
             name_length = getByte(type.add(imethod_name_offset + length_offset))
             name_address = type.add(imethod_name_offset + length_offset + 1)
             removeDataAll(name_address, name_length)
-            name = createAsciiString(name_address, name_length) 
+            name = createAsciiString(name_address, name_length)
             setEOLComment(imethod_field,name.getValue())
             createLabel(imethod_field,name.getValue().replace(" ","_"), 1)
             new_type_offset = (getInt(imethod_field.add(4)))
             new_type = type.add(new_type_offset)
             print "new_type: 0x%x" % new_type.getOffset()
-            recoverTypes(new_type)
+            recoverTypes(new_type, type)
             imethod_field = imethod_field.add(8)
             methods.append(name.getValue()  + " " + getSymbolAt(new_type).getName())
         setPreComment(type_address,"type " + name_type + " interface{" + "\n\t" + "\n\t".join(methods) + "\n" + "}")
@@ -258,8 +247,8 @@ def recoverTypes(type_address):
     #	elem *rtype // pointer element (pointed at) type
     #}
     if kind == 0x16:
-        new_address =currentProgram.getAddressFactory().getAddress(hex(getInt(type_address.add(4*pointer_size+8+8)))) 
-        recoverTypes(new_address)
+        new_address =currentProgram.getAddressFactory().getAddress(hex(getInt(type_address.add(4*pointer_size+8+8))))
+        recoverTypes(new_address, type)
 
     # Struct type
     #// structType represents a struct type.
@@ -289,7 +278,7 @@ def recoverTypes(type_address):
             createLabel(struct_field_name,name.getValue().replace(" ","_"), 1)
             new_type = getAddressAt(struct_field.add(pointer_size))
             print "new_type: 0x%x" % new_type.getOffset()
-            recoverTypes(new_type)
+            recoverTypes(new_type, type)
             struct_field = struct_field.add(3*pointer_size)
             fields.append(name.getValue()  + " " + getSymbolAt(new_type).getName())
         setPreComment(type_address,"type " + name_type + " struct{" + "\n\t" + "\n\t".join(fields) + "\n" + "}")
@@ -297,12 +286,12 @@ def recoverTypes(type_address):
 def mainPE():
     pclntab, magic = findPclntabPE()
     module_data = findModuledata(pclntab, magic)
-    type, etype, typelinks, ntypes = getTypelinks(module_data, magic) 
+    type, etype, typelinks, ntypes = getTypelinks(module_data, magic)
     etypelinks = typelinks.add(ntypes*4)
     return typelinks, etypelinks, type
 
 def mainELF():
-    typelinks, etypelinks = getTypelink() 
+    typelinks, etypelinks = getTypelink()
     type = getRodata()
     etypelinks = etypelinks.add(1)
     return typelinks, etypelinks, type
@@ -313,24 +302,29 @@ def getAllTypes(typelinks, etypelinks, type):
         while p != etypelinks:
             type_offset = getInt(p)
             type_address = type.add(type_offset)
-            recoverTypes(type_address)
+            recoverTypes(type_address, type)
             p = p.add(4)
     print len(recovered_types)
     return len(recovered_types)
 
-executable_format = currentProgram.getExecutableFormat()
 pointer_size = currentProgram.getDefaultPointerSize()
 recovered_types = []
 version = findVersion()
 length_offset = getLengthOffset()
 
-if executable_format== "Portable Executable (PE)":
-    print "PE file found"
-    typelinks, etypelinks, type = mainPE()
+def main():
+    executable_format = currentProgram.getExecutableFormat()
+
+    if executable_format == "Portable Executable (PE)":
+        print "PE file found"
+        typelinks, etypelinks, type = mainPE()
+    elif executable_format == "Executable and Linking Format (ELF)":
+        print "ELF file found"
+        typelinks, etypelinks, type = mainELF()
+    else:
+        print "Unhandled file format."
+        return
+
     getAllTypes(typelinks, etypelinks, type)
-elif executable_format== "Executable and Linking Format (ELF)":
-    print "ELF file found"
-    typelinks, etypelinks, type = mainELF()
-    getAllTypes(typelinks, etypelinks, type)
-else:
-    print "Incorrect file format."
+
+main()
