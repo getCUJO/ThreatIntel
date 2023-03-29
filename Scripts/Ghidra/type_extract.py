@@ -22,49 +22,51 @@ pclntab_magic = [
 
 #Get address at a specific address
 def getAddressAt(address):
-    return currentProgram.getAddressFactory().getAddress(hex(getInt(address)))
+    return currentProgram.getAddressFactory().getAddress(hex(ptr(address)).rstrip('L'))
 
 #Remove data at a specific location. Needed to be able to create the right strings.
 def removeDataAll(address, length):
     for i in range(length):
         removeDataAt(address.add(i))
 
-#Find .typelink section
-def getTypelink():
-    for block in getMemoryBlocks():
-        if block.getName() == ".typelink":
-            start = block.getStart()
-            end = block.getEnd()
-            print "%s [start: 0x%x, end: 0x%x]" % (block.getName(), start.getOffset(), end.getOffset())
-            return start,end
-    print "No .typelink section found."
-    return None
+#Find section by name
+def getSection(name):
+    block = getMemoryBlock(name)
+    if block is None:
+        print "No %s section found." % name
+        return None
 
-#Find .rodata section
-def getRodata():
-    for block in getMemoryBlocks():
-        if block.getName() == ".rodata":
-            start = block.getStart()
-            end = block.getEnd()
-            print "%s [start: 0x%x, end: 0x%x]" % (block.getName(), start.getOffset(), end.getOffset())
-            return start
-    print "No .rodata section found."
-    return None
+    start = block.getStart()
+    end = block.getEnd()
+    print "%s [start: 0x%x, end: 0x%x]" % (block.getName(), start.getOffset(), end.getOffset())
+    return start, end
 
-#Find version by string search
-#ToDo: Find a smarter solution.
-def findVersion():
+# Mach-O may have multiple __rodata sections,
+# one in __TEXT and one in __DATA_CONST ...?
+def getSectionComment(name, comment):
+    blocks = [
+        block
+        for block in getMemoryBlocks()
+        if block.name == name and block.comment == comment
+    ]
+    if not blocks:
+        return None
+    return blocks[0].start
+
+#Find version by string search in specific memory block
+def findVersion(name):
+    section = getSection(name)
+    if section is None:
+        return None
+    start, end = section
+    address_set = ghidra.program.model.address.AddressSet(start, end)
+
     for version in versions:
-        #Search could be smarter by looking only in specific sections
-        address = currentProgram.getMinAddress()
-        while address != None:
-            address = findBytes(address.add(1), version)
-            if address == None:
-                continue
-            else:
-                print "Version found"
-                print version
-                return version
+        if findBytes(address_set, version, 1, 1):
+            print "Version found"
+            print version
+            return version
+
     return None
 
 #Until go1.16 - two-byte long length. Now we only search for the second byte, possibly miss very long strings.
@@ -247,7 +249,7 @@ def recoverTypes(type_address, type):
     #	elem *rtype // pointer element (pointed at) type
     #}
     if kind == 0x16:
-        new_address =currentProgram.getAddressFactory().getAddress(hex(getInt(type_address.add(4*pointer_size+8+8))))
+        new_address = getAddressAt(type_address.add(4*pointer_size+8+8))
         recoverTypes(new_address, type)
 
     # Struct type
@@ -264,7 +266,7 @@ def recoverTypes(type_address, type):
     #	offsetEmbed uintptr // byte offset of field<<1 | isEmbedded
     #}
     if kind == 0x19:
-        struct_field =getAddressAt(type_address.add(5*pointer_size+8+8))
+        struct_field = getAddressAt(type_address.add(5*pointer_size+8+8))
         fields = []
         fields_length = getInt(type_address.add(6*pointer_size+8+8))
         for i in range(fields_length):
@@ -291,9 +293,21 @@ def mainPE():
     return typelinks, etypelinks, type
 
 def mainELF():
-    typelinks, etypelinks = getTypelink()
-    type = getRodata()
+    typelinks, etypelinks = getSection('.typelink')
+    type, _ = getSection('.rodata')
     etypelinks = etypelinks.add(1)
+    return typelinks, etypelinks, type
+
+def mainMachO():
+    typelinks, etypelinks = getSection('__typelink')
+    type = getSectionComment('__rodata', '__DATA_CONST')
+
+    # avoid zero padding
+    etypelinks = etypelinks.subtract(3)
+    while getInt(etypelinks) == 0:
+        etypelinks = etypelinks.subtract(4)
+    etypelinks = etypelinks.add(4)
+
     return typelinks, etypelinks, type
 
 def getAllTypes(typelinks, etypelinks, type):
@@ -308,22 +322,32 @@ def getAllTypes(typelinks, etypelinks, type):
     return len(recovered_types)
 
 pointer_size = currentProgram.getDefaultPointerSize()
+ptr = getInt if pointer_size == 4 else getLong
 recovered_types = []
-version = findVersion()
-length_offset = getLengthOffset()
 
 def main():
-    executable_format = currentProgram.getExecutableFormat()
+    global version, length_offset
 
+    executable_format = currentProgram.getExecutableFormat()
     if executable_format == "Portable Executable (PE)":
         print "PE file found"
-        typelinks, etypelinks, type = mainPE()
+        exe_f = mainPE
+        version_section = '.data'
     elif executable_format == "Executable and Linking Format (ELF)":
         print "ELF file found"
-        typelinks, etypelinks, type = mainELF()
+        exe_f = mainELF
+        version_section = '.go.buildinfo'
+    elif executable_format == "Mac OS X Mach-O":
+        print "Mach-O file found"
+        exe_f = mainMachO
+        version_section = '__go_buildinfo'
     else:
         print "Unhandled file format."
         return
+
+    typelinks, etypelinks, type = exe_f()
+    version = findVersion(version_section)
+    length_offset = getLengthOffset()
 
     getAllTypes(typelinks, etypelinks, type)
 
