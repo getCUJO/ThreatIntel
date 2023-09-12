@@ -9,7 +9,7 @@ import struct
 
 from ghidra.program.model.symbol.SourceType import *
 
-GO_MAXVER = 20
+GO_MAXVER = 23
 
 versions = ['go1.%d' % num for num in range(GO_MAXVER+1)[::-1]]
 
@@ -72,7 +72,7 @@ def findVersion(name):
 #Until go1.16 - two-byte long length. Now we only search for the second byte, possibly miss very long strings.
 #From go1.17 - Varint-encoded length. Now we only search for the first byte, possible issues with long strings.
 #Todo: Change it to avoid possible issues.
-def getLengthOffset():
+def getLengthOffset(version):
     vernum = int(version.split('.')[1])
     if vernum < 17:
         return 2
@@ -147,6 +147,18 @@ def getTypelinks(moduledata, magic):
     ntypes = getInt(moduledata.add((offset2+1)*pointer_size))
     return type, etype, typelinks, ntypes
 
+
+def readvarint(addr):
+    v = 0
+    i = 0
+    while True:
+        x = getByte(addr.add(i)) % 256
+        v += (x & 0x7f) << (7 * i)
+        i += 1
+        if x & 0x80 == 0:
+            return i, v
+
+
 #Main function to find and recover types
 def recoverTypes(type_address, type):
     if type_address in recovered_types:
@@ -159,8 +171,8 @@ def recoverTypes(type_address, type):
     kind = getByte(type_address.add(2*pointer_size+7))&0x1F
     print "KIND: 0x%x" % kind
     name_offset = getInt(type_address.add(4*pointer_size+8))
-    name_length = getByte(type.add(name_offset + length_offset))
-    name_address = type.add(name_offset + length_offset + 1)
+    name_length_length, name_length = readvarint(type.add(name_offset + length_offset))
+    name_address = type.add(name_offset + length_offset + name_length_length)
     removeDataAll(name_address,name_length)
     name = createAsciiString(name_address,name_length)
     if tflagExtraStar:
@@ -222,7 +234,7 @@ def recoverTypes(type_address, type):
     #	name nameOff // name of method
     #	typ  typeOff // .(*FuncType) underneath
     #}
-    if kind == 0x14:
+    elif kind == 0x14:
         imethod_field = getAddressAt(type_address.add(5*pointer_size+8+8))
         methods = []
         methods_length = getInt(type_address.add(6*pointer_size+8+8))
@@ -248,7 +260,7 @@ def recoverTypes(type_address, type):
     #	rtype
     #	elem *rtype // pointer element (pointed at) type
     #}
-    if kind == 0x16:
+    elif kind == 0x16:
         new_address = getAddressAt(type_address.add(4*pointer_size+8+8))
         recoverTypes(new_address, type)
 
@@ -265,7 +277,7 @@ def recoverTypes(type_address, type):
     #	typ         *rtype  // type of field
     #	offsetEmbed uintptr // byte offset of field<<1 | isEmbedded
     #}
-    if kind == 0x19:
+    elif kind == 0x19:
         struct_field = getAddressAt(type_address.add(5*pointer_size+8+8))
         fields = []
         fields_length = getInt(type_address.add(6*pointer_size+8+8))
@@ -347,7 +359,7 @@ def main():
 
     typelinks, etypelinks, type = exe_f()
     version = findVersion(version_section)
-    length_offset = getLengthOffset()
+    length_offset = getLengthOffset(version)
 
     getAllTypes(typelinks, etypelinks, type)
 
