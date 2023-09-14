@@ -138,6 +138,9 @@ def getTypelinks(moduledata, magic):
     if magic == '\xfb\xff\xff\xff\x00\x00':
         offset = 25
         offset2 = 30
+    elif magic == '\xf1\xff\xff\xff\x00\x00':
+        offset = 37
+        offset2 = 44
     else:
         offset = 35
         offset2 = 42
@@ -302,6 +305,7 @@ def mainPE():
     module_data = findModuledata(pclntab, magic)
     type, etype, typelinks, ntypes = getTypelinks(module_data, magic)
     etypelinks = typelinks.add(ntypes*4)
+
     return typelinks, etypelinks, type
 
 def mainELF():
