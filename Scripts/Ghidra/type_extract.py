@@ -102,10 +102,11 @@ def isPclntab(address):
 
 #Find moduledata by looking for references to pclntab
 def findModuledata(pclntab, magic):
+    pclntab_text = getAddressAt(pclntab.add(8 + pointer_size * 2))
     references_to_pclntab = getReferencesTo(pclntab)
     for i in range (len(references_to_pclntab)):
         module_data = references_to_pclntab[i].getFromAddress()
-        if isModuledata(module_data, magic):
+        if isModuledata(pclntab_text, module_data, magic):
             return module_data
     #If reference was not created look for the pclntab address directly
     #Search could be smarter by looking only in specific sections
@@ -116,19 +117,19 @@ def findModuledata(pclntab, magic):
         print module_data
         if module_data is None:
             return None
-        if isModuledata(module_data, magic):
+        if isModuledata(pclntab_text, module_data, magic):
             return module_data
     return None
 
 #Test if moduldata was found by checking .text section address
-def isModuledata(address, magic):
+def isModuledata(pclntab_text, address, magic):
     if magic == '\xfb\xff\xff\xff\x00\x00':
         offset = 12
     else:
         offset = 22
     text = getAddressAt(address.add(offset*pointer_size))
     memory = currentProgram.getMemory()
-    if text == memory.getBlock(".text").getStart():
+    if text == pclntab_text:
         print "Moduldata found"
         return True
     return False
@@ -351,7 +352,8 @@ def main():
         version_section = '.data'
     elif executable_format == "Executable and Linking Format (ELF)":
         print "ELF file found"
-        exe_f = mainELF
+#        exe_f = mainELF
+        exe_f = mainPE
         version_section = '.go.buildinfo'
     elif executable_format == "Mac OS X Mach-O":
         print "Mach-O file found"
