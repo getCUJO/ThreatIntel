@@ -95,6 +95,28 @@ def x86_64_reg(ins):
 
     return address, length
 
+#MOV REG1, STRING_SIZE
+#LEA REG2, [STRING_ADDRESS]
+def x86_64_reg_inv(ins):
+    op_type = ins.getOperandType(1)
+    #Check first instruction: MOV REG1, STRING_SIZE
+#    if not (ins.getMnemonicString() == "LEA" and reg is not None and OperandType.isAddress(op_type)):
+    if not (ins.getMnemonicString() == "MOV" and OperandType.isScalar(op_type)):
+        return None
+
+    ins_next = getInstructionAfter(ins)
+    op_type = ins_next.getOperandType(1)
+
+    #Check second instruction: LEA REG2, [STRING_ADDRESS]
+#    if not (ins_next.getMnemonicString() == "MOV" and ins_next.getRegister(1) != reg and OperandType.isScalar(op_type)):
+    if not (ins_next.getMnemonicString() == "LEA" and OperandType.isAddress(op_type)):
+        return None
+
+    length = ins.getOpObjects(1)[0].getValue()
+    address = ins_next.getPrimaryReference(1).getToAddress()
+
+    return address, length
+
 #ARM, 32-bit
 #LDR REG, [STRING_ADDRESS_POINTER]
 #STR REG, [SP, ..]
@@ -241,7 +263,7 @@ def main():
         l = [x86]
     elif language_id.toString().startswith("x86") and pointer_size == 8:
         print "64 BIT x86"
-        l = [x86_64_reg, x86_64_stack]
+        l = [x86_64_reg, x86_64_reg_inv, x86_64_stack]
     else:
         print "ERROR: unknown arch."
         return
