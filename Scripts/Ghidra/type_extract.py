@@ -8,7 +8,8 @@
 import struct
 from ghidra.program.model.symbol.SourceType import *
 
-versions = ['\x67\x6f\x31\x2e\x31\x38',
+versions = [ '\x67\x6f\x31\x2e\x31\x39',
+'\x67\x6f\x31\x2e\x31\x38',
 '\x67\x6f\x31\x2e\x31\x37',
 '\x67\x6f\x31\x2e\x31\x36',
 '\x67\x6f\x31\x2e\x31\x35',
@@ -81,7 +82,7 @@ def findVersion():
 #From go1.17 - Varint-encoded length. Now we only search for the first byte, possible issues with long strings.
 #Todo: Change it to avoid possible issues.
 def getLengthOffset():
-    if version in ['\x67\x6f\x31\x2e\x31\x38', '\x67\x6f\x31\x2e\x31\x37']:
+    if version in [ '\x67\x6f\x31\x2e\x31\x39', '\x67\x6f\x31\x2e\x31\x38', '\x67\x6f\x31\x2e\x31\x37']:
         return 1
     else:
         return 2
