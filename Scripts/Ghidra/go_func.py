@@ -194,7 +194,9 @@ else:
     
 if start is not None:
     magic = getInt(start) & 0xffffffff
-    if magic == 0xfffffff0:
+    # The layouts for 1.18 and 1.20 are the same,
+    # see https://github.com/golang/go/blob/b096ddb9ea84efa28eafd7850b8f8a8b3e76e49f/src/debug/gosym/pclntab.go#L259
+    if magic == 0xfffffff0 or magic == 0xfffffff1:
         renameFunc118(start)
     elif magic == 0xfffffffa:
         renameFunc116(start)
